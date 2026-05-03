@@ -1,0 +1,7 @@
+[project]
+name = "vehicle-failure-prediction-ml"
+version = "0.1.0"
+description = "Manil bajracharya"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []

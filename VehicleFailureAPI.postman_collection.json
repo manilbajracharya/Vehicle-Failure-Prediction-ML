@@ -1,0 +1,252 @@
+{
+  "info": {
+    "name": "Vehicle Failure Prediction API",
+    "_postman_id": "vfp-api-collection-v1",
+    "description": "API collection for the Vehicle Failure Prediction service.\n\nBase URL: http://localhost:8000\n\nEndpoints:\n- GET  /health         — system health check\n- POST /predict        — predict via JSON body\n- GET  /predict        — predict via query parameters\n\nAll prediction responses include:\n- failure_probability (0–1)\n- risk_level (High / Medium / Low)\n- maintenance_recommendations list\n- suggested_next_service_date",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string",
+      "description": "Change this to your deployed API URL"
+    }
+  ],
+  "item": [
+    {
+      "name": "System",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            },
+            "description": "Returns the API and model status. Use this to verify the server is up and the model loaded successfully."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [{"key": "Content-Type", "value": "application/json"}],
+              "body": "{\n  \"status\": \"ok\",\n  \"version\": \"1.0.0\",\n  \"model\": \"VehicleFailureNN-v1\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Prediction — POST (JSON body)",
+      "item": [
+        {
+          "name": "High Risk — BMW 3 Series (2014, 245k km)",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"make\": \"BMW\",\n  \"model\": \"3 Series\",\n  \"year\": 2014,\n  \"mileage_km\": 245000,\n  \"engine_type\": \"Gasoline\",\n  \"service_frequency\": 4,\n  \"recall_count\": 4,\n  \"region\": \"Quebec\",\n  \"driving_style\": \"City\"\n}",
+              "options": {"raw": {"language": "json"}}
+            },
+            "url": {
+              "raw": "{{base_url}}/predict",
+              "host": ["{{base_url}}"],
+              "path": ["predict"]
+            },
+            "description": "Older high-mileage BMW with multiple recalls — expect HIGH risk."
+          },
+          "response": [
+            {
+              "name": "200 OK — High Risk Example",
+              "status": "OK",
+              "code": 200,
+              "header": [{"key": "Content-Type", "value": "application/json"}],
+              "body": "{\n  \"vehicle\": {\n    \"year\": 2014,\n    \"make\": \"BMW\",\n    \"model\": \"3 Series\"\n  },\n  \"vehicle_age_years\": 12,\n  \"mileage_km\": 245000,\n  \"region\": \"Quebec\",\n  \"failure_probability\": 0.8312,\n  \"failure_probability_pct\": \"83.1%\",\n  \"risk_level\": \"High\",\n  \"maintenance_recommendations\": [\n    {\"task\": \"Full Synthetic Oil Change + Filters\", \"timeline\": \"Every 8,000 km or 3 months\", \"priority\": \"High\"},\n    {\"task\": \"Brake Inspection & Pads\", \"timeline\": \"Within 3 months\", \"priority\": \"High\"},\n    {\"task\": \"Transmission Fluid + Filter\", \"timeline\": \"Within 6 months\", \"priority\": \"High\"},\n    {\"task\": \"Spark Plugs & Ignition Coils\", \"timeline\": \"Within 8 months\", \"priority\": \"Medium\"},\n    {\"task\": \"Check & Fix Open Recalls\", \"timeline\": \"Within 1 month\", \"priority\": \"Critical\"},\n    {\"task\": \"Winter Tire & Battery Test\", \"timeline\": \"Before October 2026\", \"priority\": \"High\"},\n    {\"task\": \"Suspension, Bushings & Steering\", \"timeline\": \"Within 4 months\", \"priority\": \"High\"}\n  ],\n  \"suggested_next_service_date\": \"2026-07-17\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Medium Risk — Toyota Camry Hybrid (2018, 168k km)",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"make\": \"Toyota\",\n  \"model\": \"Camry\",\n  \"year\": 2018,\n  \"mileage_km\": 168000,\n  \"engine_type\": \"Hybrid\",\n  \"service_frequency\": 6,\n  \"recall_count\": 2,\n  \"region\": \"Ontario\",\n  \"driving_style\": \"Mixed\"\n}",
+              "options": {"raw": {"language": "json"}}
+            },
+            "url": {
+              "raw": "{{base_url}}/predict",
+              "host": ["{{base_url}}"],
+              "path": ["predict"]
+            },
+            "description": "Mid-aged Toyota hybrid with moderate mileage — expect MEDIUM risk."
+          },
+          "response": []
+        },
+        {
+          "name": "Low Risk — Honda Civic (2023, 28k km)",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"make\": \"Honda\",\n  \"model\": \"Civic\",\n  \"year\": 2023,\n  \"mileage_km\": 28000,\n  \"engine_type\": \"Gasoline\",\n  \"service_frequency\": 8,\n  \"recall_count\": 0,\n  \"region\": \"BC\",\n  \"driving_style\": \"Highway\"\n}",
+              "options": {"raw": {"language": "json"}}
+            },
+            "url": {
+              "raw": "{{base_url}}/predict",
+              "host": ["{{base_url}}"],
+              "path": ["predict"]
+            },
+            "description": "Nearly-new Honda Civic, low mileage, no recalls — expect LOW risk."
+          },
+          "response": []
+        },
+        {
+          "name": "Electric Vehicle — Hyundai (2020)",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"make\": \"Hyundai\",\n  \"model\": \"Ioniq 5\",\n  \"year\": 2020,\n  \"mileage_km\": 95000,\n  \"engine_type\": \"Electric\",\n  \"service_frequency\": 10,\n  \"recall_count\": 1,\n  \"region\": \"Alberta\",\n  \"driving_style\": \"Mixed\"\n}",
+              "options": {"raw": {"language": "json"}}
+            },
+            "url": {
+              "raw": "{{base_url}}/predict",
+              "host": ["{{base_url}}"],
+              "path": ["predict"]
+            },
+            "description": "Hyundai EV with one recall in a cold-weather province."
+          },
+          "response": []
+        },
+        {
+          "name": "422 Validation Error — Invalid Make",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"make\": \"Volkswagen\",\n  \"model\": \"Golf\",\n  \"year\": 2019,\n  \"mileage_km\": 80000,\n  \"engine_type\": \"Gasoline\",\n  \"service_frequency\": 6,\n  \"recall_count\": 0,\n  \"region\": \"Ontario\",\n  \"driving_style\": \"City\"\n}",
+              "options": {"raw": {"language": "json"}}
+            },
+            "url": {
+              "raw": "{{base_url}}/predict",
+              "host": ["{{base_url}}"],
+              "path": ["predict"]
+            },
+            "description": "Sends an unsupported make ('Volkswagen') — server should return 422 Unprocessable Entity."
+          },
+          "response": []
+        },
+        {
+          "name": "422 Validation Error — Year Out of Range",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"make\": \"Ford\",\n  \"model\": \"F-150\",\n  \"year\": 1985,\n  \"mileage_km\": 320000,\n  \"engine_type\": \"Gasoline\",\n  \"service_frequency\": 3,\n  \"recall_count\": 2,\n  \"region\": \"Prairies\",\n  \"driving_style\": \"Mixed\"\n}",
+              "options": {"raw": {"language": "json"}}
+            },
+            "url": {
+              "raw": "{{base_url}}/predict",
+              "host": ["{{base_url}}"],
+              "path": ["predict"]
+            },
+            "description": "Year 1985 is below the allowed minimum (1990) — expect 422."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Prediction — GET (query params)",
+      "item": [
+        {
+          "name": "High Risk — BMW 3 Series (2014, 245k km)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/predict?make=BMW&model=3+Series&year=2014&mileage_km=245000&engine_type=Gasoline&service_frequency=4&recall_count=4&region=Quebec&driving_style=City",
+              "host": ["{{base_url}}"],
+              "path": ["predict"],
+              "query": [
+                {"key": "make",               "value": "BMW"},
+                {"key": "model",              "value": "3 Series"},
+                {"key": "year",               "value": "2014"},
+                {"key": "mileage_km",         "value": "245000"},
+                {"key": "engine_type",        "value": "Gasoline"},
+                {"key": "service_frequency",  "value": "4"},
+                {"key": "recall_count",       "value": "4"},
+                {"key": "region",             "value": "Quebec"},
+                {"key": "driving_style",      "value": "City"}
+              ]
+            },
+            "description": "Same high-risk BMW as the POST example, via query parameters."
+          },
+          "response": []
+        },
+        {
+          "name": "Low Risk — Honda Civic (2023, 28k km)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/predict?make=Honda&model=Civic&year=2023&mileage_km=28000&engine_type=Gasoline&service_frequency=8&recall_count=0&region=BC&driving_style=Highway",
+              "host": ["{{base_url}}"],
+              "path": ["predict"],
+              "query": [
+                {"key": "make",               "value": "Honda"},
+                {"key": "model",              "value": "Civic"},
+                {"key": "year",               "value": "2023"},
+                {"key": "mileage_km",         "value": "28000"},
+                {"key": "engine_type",        "value": "Gasoline"},
+                {"key": "service_frequency",  "value": "8"},
+                {"key": "recall_count",       "value": "0"},
+                {"key": "region",             "value": "BC"},
+                {"key": "driving_style",      "value": "Highway"}
+              ]
+            },
+            "description": "Low-risk Honda Civic via query parameters."
+          },
+          "response": []
+        },
+        {
+          "name": "Medium Risk — Toyota Camry Hybrid",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/predict?make=Toyota&model=Camry&year=2018&mileage_km=168000&engine_type=Hybrid&service_frequency=6&recall_count=2&region=Ontario&driving_style=Mixed",
+              "host": ["{{base_url}}"],
+              "path": ["predict"],
+              "query": [
+                {"key": "make",               "value": "Toyota"},
+                {"key": "model",              "value": "Camry"},
+                {"key": "year",               "value": "2018"},
+                {"key": "mileage_km",         "value": "168000"},
+                {"key": "engine_type",        "value": "Hybrid"},
+                {"key": "service_frequency",  "value": "6"},
+                {"key": "recall_count",       "value": "2"},
+                {"key": "region",             "value": "Ontario"},
+                {"key": "driving_style",      "value": "Mixed"}
+              ]
+            },
+            "description": "Medium-risk Toyota Camry Hybrid via query parameters."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
