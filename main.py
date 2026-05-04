@@ -15,7 +15,7 @@ from schemas import (
     HealthResponse,
     ErrorResponse,
 )
-from predictor import predict
+from ml.predictor import predict
 
 # ── App ────────────────────────────────────────────────────────────────────────
 app = FastAPI(
