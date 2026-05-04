@@ -1,105 +1,157 @@
 """
-main.py - Vehicle Failure Prediction API (Fixed for Render)
+ml/predictor.py
+---------------
+Pure prediction logic.  No FastAPI dependency — easy to unit-test.
 """
 
-import os
-import sys
-from pathlib import Path
-
-# Add current directory to Python path (Important for Render)
-BASE_DIR = Path(__file__).parent
-sys.path.append(str(BASE_DIR))
-
-from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
-
-# Import with error handling for better debugging
-try:
-    from schemas import (
-        VehicleRequest,
-        PredictionResponse,
-        HealthResponse,
-        ErrorResponse,
-    )
-    from predictor import predict
-except ImportError as e:
-    print(f"Import Error: {e}")
-    print(f"Current directory: {BASE_DIR}")
-    print(f"Python Path: {sys.path}")
-    raise
-
-# ── App ────────────────────────────────────────────────────────────────────────
-app = FastAPI(
-    title="Vehicle Failure Prediction API",
-    description="Predicts the probability of major vehicle repair within next 12 months.",
-    version="1.0.0",
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+import pandas as pd
+from datetime import datetime, timedelta
+from ml.model import (
+    nn_model,
+    scaler,
+    engineer_features,
+    FEATURE_COLS,
+    CURRENT_YEAR,
 )
 
 
-# ── Health ─────────────────────────────────────────────────────────────────────
-@app.get("/health", tags=["System"])
-def health_check():
-    return {"status": "ok", "version": "1.0.0", "model": "VehicleFailureNN-v1"}
+# ── Helpers ────────────────────────────────────────────────────────────────────
+def _risk_label(prob: float) -> str:
+    if prob > 0.65:
+        return "High"
+    if prob > 0.35:
+        return "Medium"
+    return "Low"
 
 
-# ── POST Predict ───────────────────────────────────────────────────────────────
-@app.post("/predict", response_model=PredictionResponse, tags=["Prediction"])
-def predict_post(vehicle: VehicleRequest):
-    try:
-        result = predict(vehicle.model_dump())
-        return result
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+def _build_recommendations(
+    age: int, mileage: int, recall_count: int, region: str, engine_type: str
+) -> list[dict]:
+    recs = []
 
-
-# ── GET Predict ────────────────────────────────────────────────────────────────
-@app.get("/predict", response_model=PredictionResponse, tags=["Prediction"])
-def predict_get(
-    make: str = Query(...),
-    model: str = Query(...),
-    year: int = Query(...),
-    mileage_km: int = Query(...),
-    engine_type: str = Query(...),
-    service_frequency: int = Query(...),
-    recall_count: int = Query(...),
-    region: str = Query(...),
-    driving_style: str = Query(...),
-):
-    try:
-        vehicle = VehicleRequest(
-            make=make,
-            model=model,
-            year=year,
-            mileage_km=mileage_km,
-            engine_type=engine_type,
-            service_frequency=service_frequency,
-            recall_count=recall_count,
-            region=region,
-            driving_style=driving_style,
+    if mileage > 150_000:
+        recs.append(
+            {
+                "task": "Full Synthetic Oil Change + Filters",
+                "timeline": "Every 8,000 km or 3 months",
+                "priority": "High",
+            }
         )
-        result = predict(vehicle.model_dump())
-        return result
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+    else:
+        recs.append(
+            {
+                "task": "Oil Change + Filters",
+                "timeline": "Every 10,000 km or 6 months",
+                "priority": "Medium",
+            }
+        )
+
+    if age >= 7 or mileage > 120_000:
+        recs.append(
+            {
+                "task": "Brake Inspection & Pads",
+                "timeline": "Within 3 months",
+                "priority": "High",
+            }
+        )
+
+    if age >= 9 or mileage > 160_000:
+        recs.append(
+            {
+                "task": "Transmission Fluid + Filter",
+                "timeline": "Within 6 months",
+                "priority": "High",
+            }
+        )
+        recs.append(
+            {
+                "task": "Spark Plugs & Ignition Coils",
+                "timeline": "Within 8 months",
+                "priority": "Medium",
+            }
+        )
+
+    if recall_count >= 1:
+        recs.append(
+            {
+                "task": "Check & Fix Open Recalls",
+                "timeline": "Within 1 month",
+                "priority": "Critical",
+            }
+        )
+
+    if region in ["Ontario", "Quebec", "Prairies", "Alberta"]:
+        recs.append(
+            {
+                "task": "Winter Tire & Battery Test",
+                "timeline": "Before October 2026",
+                "priority": "High",
+            }
+        )
+
+    if engine_type == "Hybrid":
+        recs.append(
+            {
+                "task": "Hybrid System Health Check",
+                "timeline": "Within 6 months",
+                "priority": "Medium",
+            }
+        )
+
+    if mileage > 200_000:
+        recs.append(
+            {
+                "task": "Suspension, Bushings & Steering",
+                "timeline": "Within 4 months",
+                "priority": "High",
+            }
+        )
+
+    return recs[:8]
 
 
-# ── Root ───────────────────────────────────────────────────────────────────────
-@app.get("/", include_in_schema=False)
-def root():
-    return {"message": "Vehicle Failure Prediction API", "docs": "/docs"}
+# ── Main prediction entry-point ────────────────────────────────────────────────
+def predict(vehicle: dict) -> dict:
+    """
+    Parameters
+    ----------
+    vehicle : dict — raw vehicle fields from the API request
 
+    Returns
+    -------
+    dict — fully structured JSON-serialisable prediction result
+    """
+    df = pd.DataFrame([vehicle])
+    df = engineer_features(df)
 
-# ── Local Run ──────────────────────────────────────────────────────────────────
-if __name__ == "__main__":
-    import uvicorn
+    input_scaled = scaler.transform(df[FEATURE_COLS].values)
+    prob = float(nn_model.predict(input_scaled, verbose=0)[0][0])
 
-    port = int(os.getenv("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port)
+    age = int(df["vehicle_age"].values[0])
+    mileage = vehicle["mileage_km"]
+
+    recommendations = _build_recommendations(
+        age=age,
+        mileage=mileage,
+        recall_count=vehicle.get("recall_count", 0),
+        region=vehicle.get("region", ""),
+        engine_type=vehicle.get("engine_type", ""),
+    )
+
+    next_service_date = (datetime.now() + timedelta(days=75)).strftime("%Y-%m-%d")
+
+    return {
+        "vehicle": {
+            "year": vehicle["year"],
+            "make": vehicle["make"],
+            "model": vehicle["model"],
+        },
+        "vehicle_age_years": age,
+        "mileage_km": mileage,
+        "region": vehicle.get("region"),
+        "failure_probability": round(prob, 4),
+        "failure_probability_pct": f"{prob:.1%}",
+        "risk_level": _risk_label(prob),
+        "maintenance_recommendations": recommendations,
+        "suggested_next_service_date": next_service_date,
+    }
