@@ -1,0 +1,28 @@
+version: 1
+
+services:
+  - type: web
+    name: vehicle-failure-api
+    runtime: python
+    plan: free                  # Change to starter/standard later if needed
+    
+    # Build settings
+    buildCommand: pip install -r requirements.txt
+    
+    # Start command
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    
+    # Environment variables
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12
+      
+      # Add any other environment variables here if needed
+      # - key: MODEL_PATH
+      #   value: model/vehicle_failure_model.pkl
+
+    # Auto deploy on push to main
+    autoDeploy: true
+
+    # Health check
+    healthCheckPath: /health
