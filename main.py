@@ -2,10 +2,9 @@
 main.py
 -------
 Vehicle Failure Prediction API
-Run: uvicorn main:app --reload --host 0.0.0.0 --port 8000
-Docs: http://localhost:8000/docs
 """
 
+import os
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,7 +22,7 @@ app = FastAPI(
     title="Vehicle Failure Prediction API",
     description=(
         "Predicts the probability of a major vehicle repair within the next 12 months "
-        "using a trained neural network. Supports both GET (query params) and POST (JSON body)."
+        "using a trained neural network."
     ),
     version="1.0.0",
     contact={"name": "Vehicle ML Team"},
@@ -38,13 +37,8 @@ app.add_middleware(
 )
 
 
-# ── Health ─────────────────────────────────────────────────────────────────────
-@app.get(
-    "/health",
-    response_model=HealthResponse,
-    tags=["System"],
-    summary="Health check",
-)
+# ── Health Check ───────────────────────────────────────────────────────────────
+@app.get("/health", response_model=HealthResponse, tags=["System"])
 def health_check():
     """Returns API and model status."""
     return {"status": "ok", "version": "1.0.0", "model": "VehicleFailureNN-v1"}
@@ -55,29 +49,10 @@ def health_check():
     "/predict",
     response_model=PredictionResponse,
     tags=["Prediction"],
-    summary="Predict vehicle failure (POST)",
-    responses={422: {"model": ErrorResponse, "description": "Validation error"}},
+    responses={422: {"model": ErrorResponse}},
 )
 def predict_post(vehicle: VehicleRequest):
-    """
-    Submit a single vehicle as a **JSON body** and receive a failure
-    probability, risk level, and maintenance recommendations.
-
-    **Example body:**
-    ```json
-    {
-      "make": "Toyota",
-      "model": "Camry",
-      "year": 2018,
-      "mileage_km": 168000,
-      "engine_type": "Hybrid",
-      "service_frequency": 6,
-      "recall_count": 2,
-      "region": "Ontario",
-      "driving_style": "Mixed"
-    }
-    ```
-    """
+    """Predict using JSON body."""
     try:
         result = predict(vehicle.model_dump())
         return result
@@ -90,41 +65,20 @@ def predict_post(vehicle: VehicleRequest):
     "/predict",
     response_model=PredictionResponse,
     tags=["Prediction"],
-    summary="Predict vehicle failure (GET)",
-    responses={422: {"model": ErrorResponse, "description": "Validation error"}},
+    responses={422: {"model": ErrorResponse}},
 )
 def predict_get(
-    make: str = Query(
-        ..., description="Vehicle make", examples={"Toyota": {"value": "Toyota"}}
-    ),
-    model: str = Query(
-        ..., description="Vehicle model", examples={"Camry": {"value": "Camry"}}
-    ),
-    year: int = Query(..., ge=1990, le=2026, description="Model year"),
-    mileage_km: int = Query(
-        ..., ge=0, le=999_999, description="Odometer reading in km"
-    ),
+    make: str = Query(..., description="Vehicle make"),
+    model: str = Query(..., description="Vehicle model"),
+    year: int = Query(..., ge=1990, le=2026),
+    mileage_km: int = Query(..., ge=0, le=999999),
     engine_type: str = Query(..., description="Gasoline | Hybrid | Electric | Diesel"),
-    service_frequency: int = Query(
-        ..., ge=1, le=24, description="Months between services"
-    ),
-    recall_count: int = Query(..., ge=0, le=20, description="Number of recalls"),
+    service_frequency: int = Query(..., ge=1, le=24),
+    recall_count: int = Query(..., ge=0, le=20),
     region: str = Query(..., description="Ontario | Quebec | BC | Alberta | Prairies"),
     driving_style: str = Query(..., description="City | Highway | Mixed"),
 ):
-    """
-    Pass all vehicle fields as **query parameters**.
-
-    Useful for quick browser testing or simple HTTP GET integrations.
-
-    Example:
-    ```
-    GET /predict?make=Toyota&model=Camry&year=2018&mileage_km=168000
-                &engine_type=Hybrid&service_frequency=6&recall_count=2
-                &region=Ontario&driving_style=Mixed
-    ```
-    """
-    # Reuse the Pydantic model for validation
+    """Predict using query parameters."""
     try:
         vehicle = VehicleRequest(
             make=make,
@@ -137,17 +91,32 @@ def predict_get(
             region=region,
             driving_style=driving_style,
         )
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-
-    try:
         result = predict(vehicle.model_dump())
         return result
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-# ── Root redirect to docs ──────────────────────────────────────────────────────
+# ── Root ───────────────────────────────────────────────────────────────────────
 @app.get("/", include_in_schema=False)
 def root():
-    return JSONResponse({"message": "Vehicle Failure Prediction API", "docs": "/docs"})
+    return JSONResponse(
+        {
+            "message": "Vehicle Failure Prediction API",
+            "docs": "/docs",
+            "health": "/health",
+        }
+    )
+
+
+# ── Run locally ────────────────────────────────────────────────────────────────
+if __name__ == "__main__":
+    import uvicorn
+
+    port = int(os.getenv("PORT", 8000))  # Important for Render
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=port,
+        reload=True,  # Only works in development
+    )
