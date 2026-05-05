@@ -105,18 +105,21 @@ def predict_get(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-# ── POST /predict/vin ─────────────────────────────────────────────────────────
-@app.post(
+# ── GET /predict/vin ──────────────────────────────────────────────────────────
+@app.get(
     "/predict/vin",
     response_model=PredictionResponse,
     tags=["Prediction"],
     summary="Predict using VIN number",
 )
-async def predict_by_vin(request: VINRequest):
+async def predict_by_vin(
+    vin: str = Query(..., description="17-character Vehicle Identification Number"),
+):
     """
     Decode VIN using carapi.app and return failure prediction.
+    Example: /predict/vin?vin=1HGCV1F30JA012345
     """
-    vin = request.vin.strip().upper()
+    vin = vin.strip().upper()
 
     if len(vin) != 17:
         raise HTTPException(
@@ -140,7 +143,7 @@ async def predict_by_vin(request: VINRequest):
             "make": car_data.get("make", "Unknown"),
             "model": car_data.get("model", "Unknown"),
             "year": car_data.get("year", 2020),
-            "mileage_km": 85000,  # Default value - can be improved later
+            "mileage_km": 85000,  # Default - can be improved later
             "engine_type": car_data.get("engine_type", "Gasoline"),
             "service_frequency": 6,
             "recall_count": 0,
@@ -151,7 +154,7 @@ async def predict_by_vin(request: VINRequest):
         # Get prediction
         result = predict(vehicle_dict)
 
-        # Add VIN information to response
+        # Add VIN information
         result["vin"] = vin
         result["decoded_vehicle"] = {
             "make": car_data.get("make"),
