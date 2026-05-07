@@ -1,9 +1,10 @@
 """
 ml/predictor.py
-Enhanced Version with:
-- Vehicle Health Score (0-100)
-- Feature Contributions (SHAP-like)
-- Multi-label Failure Type Prediction
+---------------
+Enhanced prediction with:
+- Vehicle Health Score (0–100)
+- SHAP-like Feature Contributions
+- Multi-label Failure Type Probabilities
 """
 
 import pandas as pd
@@ -17,7 +18,7 @@ from ml.model import (
 )
 
 
-# ── Helpers ────────────────────────────────────────────────────────────────────
+# ── Risk label ─────────────────────────────────────────────────────────────────
 def _risk_label(prob: float) -> str:
     if prob > 0.65:
         return "High"
@@ -26,22 +27,20 @@ def _risk_label(prob: float) -> str:
     return "Low"
 
 
+# ── Health score ───────────────────────────────────────────────────────────────
 def _calculate_health_score(prob: float) -> int:
-    """Convert failure probability to Vehicle Health Score (0-100)"""
-    score = int(100 - (prob * 100))
-    return max(0, min(100, score))
+    return max(0, min(100, int(100 - prob * 100)))
 
 
+# ── SHAP-like feature contributions ───────────────────────────────────────────
 def _get_feature_contributions(vehicle: dict, prob: float) -> list[dict]:
-    """Simulate SHAP-like feature contributions"""
     contributions = []
-
     mileage = vehicle.get("mileage_km", 0)
     age = CURRENT_YEAR - vehicle.get("year", CURRENT_YEAR)
     service_freq = vehicle.get("service_frequency", 6)
     recall = vehicle.get("recall_count", 0)
 
-    if mileage > 150000:
+    if mileage > 150_000:
         contributions.append(
             {"feature": "High Mileage", "impact": "+28%", "direction": "negative"}
         )
@@ -66,28 +65,29 @@ def _get_feature_contributions(vehicle: dict, prob: float) -> list[dict]:
             {"feature": "City Driving", "impact": "+8%", "direction": "negative"}
         )
 
-    contributions.sort(key=lambda x: float(x["impact"].strip("%")), reverse=True)
+    contributions.sort(
+        key=lambda x: float(x["impact"].replace("%", "").replace("+", "")), reverse=True
+    )
     return contributions[:5]
 
 
+# ── Failure type probabilities ─────────────────────────────────────────────────
 def _predict_failure_types(vehicle: dict) -> dict:
-    """Predict probability for each major failure type"""
     mileage = vehicle.get("mileage_km", 0)
     age = CURRENT_YEAR - vehicle.get("year", CURRENT_YEAR)
-
     return {
-        "Engine": round(min(0.85, (mileage / 300000) + (age / 25)), 3),
-        "Transmission": round(min(0.75, (mileage / 280000) + (age / 22)), 3),
-        "Brake System": round(min(0.9, mileage / 200000), 3),
+        "Engine": round(min(0.85, (mileage / 300_000) + (age / 25)), 3),
+        "Transmission": round(min(0.75, (mileage / 280_000) + (age / 22)), 3),
+        "Brake System": round(min(0.90, mileage / 200_000), 3),
         "Electrical": round(min(0.65, age / 18), 3),
-        "Suspension": round(min(0.8, mileage / 220000), 3),
+        "Suspension": round(min(0.80, mileage / 220_000), 3),
     }
 
 
+# ── Maintenance recommendations ────────────────────────────────────────────────
 def _build_recommendations(
     age: int, mileage: int, recall_count: int, region: str, engine_type: str
 ) -> list[dict]:
-    """Your original recommendation logic"""
     recs = []
 
     if mileage > 150_000:
@@ -171,10 +171,12 @@ def _build_recommendations(
     return recs[:8]
 
 
-# ── Main Prediction Function ─────────────────────────────────────────────────
+# ── Main prediction entry-point ────────────────────────────────────────────────
 def predict(vehicle: dict) -> dict:
     """
-    Enhanced prediction with Health Score, Feature Importance & Failure Types
+    Run the neural network and return a fully structured, JSON-serialisable
+    prediction result.  The `vehicle` key always uses the full VehicleSummary
+    shape (extra fields default to None so they pass Pydantic validation).
     """
     df = pd.DataFrame([vehicle])
     df = engineer_features(df)
@@ -196,15 +198,29 @@ def predict(vehicle: dict) -> dict:
     next_service_date = (datetime.now() + timedelta(days=75)).strftime("%Y-%m-%d")
 
     return {
+        # VehicleSummary — core fields populated, extended fields None by default.
+        # The VIN endpoint overwrites this key with the full decoded data.
         "vehicle": {
-            "year": vehicle["year"],
-            "make": vehicle["make"],
-            "model": vehicle["model"],
+            "year": vehicle.get("year"),
+            "make": vehicle.get("make"),
+            "model": vehicle.get("model"),
+            "trim": None,
+            "displacement_l": None,
+            "turbo": None,
+            "engine_model": None,
+            "engine_configuration": None,
+            "fuel_type_primary": None,
+            "transmission_style": None,
+            "drive_type": None,
+            "plant_country": None,
+            "plant_state": None,
+            "body_class": None,
+            "number_of_seats": None,
+            "gross_vehicle_weight_rating_from": None,
         },
         "vehicle_age_years": age,
         "mileage_km": mileage,
         "region": vehicle.get("region"),
-        # New Enhanced Fields
         "vehicle_health_score": _calculate_health_score(prob),
         "failure_probability": round(prob, 4),
         "failure_probability_pct": f"{prob:.1%}",
